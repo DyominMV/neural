@@ -40,8 +40,8 @@ main = do
     getRandomNetwork
       0.8
       2
-      [ [no  , no ],
-        [no  ]
+      [ [gauss, gauss],
+        [gauss]
       ]
   print network
   printNetworkInfo network batch

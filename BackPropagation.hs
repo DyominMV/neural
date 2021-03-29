@@ -1,13 +1,20 @@
 module BackPropagation (learnBatch) where
 
 import ActivationFunction
-    ( ActivationFunction(derivativeInResult) )
+  ( ActivationFunction (derivative),
+    eval,
+  )
 import Data.Function ((&))
 import Data.List (transpose)
-import Matrix ( buildMatrix, Matrix(..), transposeMatrix )
+import Matrix (Matrix (..), buildMatrix, transposeMatrix)
 import NeuralNetwork
-    ( applyLayer, Input, Layer(..), NeuralNetwork(..), Output )
-import Semiring ( Semiring(plus, prod) )
+  ( Input,
+    Layer (..),
+    NeuralNetwork (..),
+    Output,
+    applyLayer,
+  )
+import Semiring (Semiring (plus, prod))
 
 data NeuronOutput = NeuronOutput {oOutput :: Double, oDerivativeValue :: Double}
 
@@ -17,17 +24,20 @@ data NeuronLearningInfo = NeuronLearningInfo {liOutput :: Double, liDelta :: Dou
 
 type LayerLearningInfo = [NeuronLearningInfo]
 
+prodV :: Matrix Double -> Input -> Output
+prodV m v =
+  transpose [v] & Matrix
+    & prod m
+    & rows
+    & concat
+
 computeLayerOutputs :: Layer -> Input -> LayerOutput
 computeLayerOutputs layer input =
-  layer
-    & activators
-    & map derivativeInResult
-    & (const 1 :)
-    & zipWith (flip ($)) output
-    & zipWith NeuronOutput output
-  where
-    output :: Output
-    output = 1 : applyLayer layer (tail input)
+  prodV (layer & weights) input
+    & zipWith
+      (\activator sum -> NeuronOutput (eval activator sum) (derivative activator sum))
+      (layer & activators)
+    & (NeuronOutput 1 1 :)
 
 computeOutputsFlipped :: NeuralNetwork -> Input -> [LayerOutput]
 computeOutputsFlipped network input =
@@ -46,13 +56,6 @@ outputLayerLearningInfo factOutput targetOutput =
     )
     factOutput
     (1 : targetOutput)
-
-prodV :: Matrix Double -> Input -> Output
-prodV m v =
-  transpose [v] & Matrix
-    & prod m
-    & rows
-    & concat
 
 regularLayerLearningInfo :: LayerOutput -> Layer -> LayerLearningInfo -> LayerLearningInfo
 regularLayerLearningInfo factOutput layer nextLayerLearningInfo =

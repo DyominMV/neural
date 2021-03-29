@@ -2,20 +2,22 @@ module ActivationFunction where
 
 data ActivationFunction = ActivationFunction
   { eval :: Double -> Double,
-    derivativeInResult :: Double -> Double
+    derivative :: Double -> Double
   }
 
 logistic :: ActivationFunction
 logistic =
   ActivationFunction
-    (\x -> 1.0 / (1.0 + exp (- x)))
-    (\y -> y * (1 - y))
+    sigma
+    (\y -> sigma y * (1 - sigma y))
+  where
+    sigma x = 1.0 / (1.0 + exp (- x))
 
 th :: ActivationFunction
 th =
   ActivationFunction
     tanh
-    (\y -> 1 - y * y)
+    (\y -> 1 - tanh y * tanh y)
 
 no :: ActivationFunction
 no =
@@ -27,4 +29,10 @@ periodic :: ActivationFunction
 periodic =
   ActivationFunction
     sin
-    (cos . asin) 
+    cos
+
+gauss :: ActivationFunction
+gauss = 
+  ActivationFunction
+    (\x -> exp (-x*x))
+    (\y -> - exp (-y*y) * 2 * y)
