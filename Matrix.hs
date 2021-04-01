@@ -44,7 +44,7 @@ instance (Semiring x) => Semiring (Matrix x) where
   prod m1 m2 = buildMatrix listProd (rows m1) (cols m2)
 
 instance (Show x) => Show (Matrix x) where
-  show m1 = rows m1 & concatMap (\row -> show row ++ "\n")
+  show m1 = rows m1 & concatMap (\row -> concatMap (\num -> show num ++ " ") row ++ "\n")
 
 limit :: Int -> Int -> Matrix x -> Matrix x
 limit maxRows maxCols (Matrix m) = Matrix $ take maxRows $ map (take maxCols) m

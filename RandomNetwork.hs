@@ -12,7 +12,7 @@ import GHC.Float (rationalToDouble)
 import Matrix (Matrix (..), limit)
 import NeuralNetwork
   ( Layer (..),
-    NeuralNetwork (..),
+    NeuralNetwork (..), NetworkStructure (NetworkStructure)
   )
 import Random (getRandomDoubles, getURandomDoubles)
 import Semiring (Semiring (zero))
@@ -52,20 +52,20 @@ getZeroLayer inputs nodeInfo =
     (zero & limit (length nodeInfo) (1 + inputs))
     nodeInfo
 
-getZeroNetwork :: Int -> [[ActivationFunction]] -> NeuralNetwork
-getZeroNetwork inputs nodeInfo =
+getZeroNetwork :: NetworkStructure  -> NeuralNetwork
+getZeroNetwork (NetworkStructure inputs nodeInfo) =
   NeuralNetwork $
     zipWith
       getZeroLayer
       (inputs : map length nodeInfo)
       nodeInfo
 
-getRandomNetwork :: Double -> Int -> [[ActivationFunction]] -> IO NeuralNetwork
-getRandomNetwork weightLimit inputs nodeInfo = do
+getRandomNetwork :: Double -> NetworkStructure  -> IO NeuralNetwork
+getRandomNetwork weightLimit structure = do
   randoms <- getRandomDoubles weightLimit
-  return (getZeroNetwork inputs nodeInfo & fillNetwork randoms)
+  return (getZeroNetwork structure & fillNetwork randoms)
 
-getURandomNetwork :: Double -> Int -> [[ActivationFunction]] -> IO NeuralNetwork
-getURandomNetwork weightLimit inputs nodeInfo = do
+getURandomNetwork :: Double -> NetworkStructure  -> IO NeuralNetwork
+getURandomNetwork weightLimit structure = do
   randoms <- getURandomDoubles weightLimit
-  return (getZeroNetwork inputs nodeInfo & fillNetwork randoms)
+  return (getZeroNetwork structure & fillNetwork randoms)

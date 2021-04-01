@@ -1,38 +1,20 @@
 module ActivationFunction where
 
-data ActivationFunction = ActivationFunction
-  { eval :: Double -> Double,
-    derivative :: Double -> Double
-  }
+data ActivationFunction = Logistic | Th | No | Periodic | Gauss
+  deriving (Show, Read)
 
-logistic :: ActivationFunction
-logistic =
-  ActivationFunction
-    sigma
-    (\y -> sigma y * (1 - sigma y))
-  where
-    sigma x = 1.0 / (1.0 + exp (- x))
+eval :: ActivationFunction -> Double -> Double
+eval activator = case activator of
+  Logistic -> \x -> 1.0 / (1.0 + exp (- x))
+  Th -> tanh
+  No -> id
+  Periodic -> sin
+  Gauss -> \x -> exp (- x * x)
 
-th :: ActivationFunction
-th =
-  ActivationFunction
-    tanh
-    (\y -> 1 - tanh y * tanh y)
-
-no :: ActivationFunction
-no =
-  ActivationFunction
-    id
-    (const 1)
-
-periodic :: ActivationFunction
-periodic =
-  ActivationFunction
-    sin
-    cos
-
-gauss :: ActivationFunction
-gauss = 
-  ActivationFunction
-    (\x -> exp (-x*x))
-    (\y -> - exp (-y*y) * 2 * y)
+derivative :: ActivationFunction -> Double -> Double
+derivative activator = case activator of
+  Logistic -> \x -> eval Logistic x * (1 - eval Logistic x)
+  Th -> \x -> 1 - tanh x * tanh x
+  No -> const 1
+  Periodic -> cos
+  Gauss -> \x -> - exp (- x * x) * 2 * x

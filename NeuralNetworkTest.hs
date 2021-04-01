@@ -6,13 +6,21 @@ import Data.Function ((&))
 import NeuralNetwork
 import RandomNetwork
 
-batch :: [([Double], [Double])]
+batch :: Batch
 batch =
   [ ([1, 0], [0]),
     ([0, 1], [0]),
     ([1, 1], [1]),
     ([0, 0], [1])
   ]
+
+networkStructure :: NetworkStructure
+networkStructure =
+  NetworkStructure
+    2
+    [ [Gauss, Gauss],
+      [No]
+    ]
 
 learnBatchNTimes :: Int -> Double -> [(Input, Output)] -> NeuralNetwork -> NeuralNetwork
 learnBatchNTimes n eta batch network =
@@ -38,11 +46,8 @@ main :: IO ()
 main = do
   network <-
     getRandomNetwork
-      0.8
-      2
-      [ [gauss, gauss],
-        [gauss]
-      ]
+      0.5
+      networkStructure
   print network
   printNetworkInfo network batch
   putStr "\n\n\n"

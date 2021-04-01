@@ -1,7 +1,8 @@
 module BackPropagation (learnBatch) where
 
 import ActivationFunction
-  ( ActivationFunction (derivative),
+  ( ActivationFunction,
+    derivative,
     eval,
   )
 import Data.Function ((&))
@@ -12,7 +13,7 @@ import NeuralNetwork
     Layer (..),
     NeuralNetwork (..),
     Output,
-    applyLayer,
+    applyLayer, Batch
   )
 import Semiring (Semiring (plus, prod))
 
@@ -105,7 +106,7 @@ computeWeightDeltas eta learningInfos =
     learningInfos
     & WeightDeltas
 
-learnBatch :: Double -> [(Input, Output)] -> NeuralNetwork -> NeuralNetwork
+learnBatch :: Double -> Batch -> NeuralNetwork -> NeuralNetwork
 learnBatch eta samples network =
   samples
     & map

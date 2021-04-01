@@ -1,15 +1,24 @@
 module NeuralNetwork where
 
-import ActivationFunction ( ActivationFunction(eval) )
+import ActivationFunction (ActivationFunction, eval)
 import Data.Function ((&))
 import Data.List (transpose)
-import Matrix ( Matrix(..) )
-import Semiring ( Semiring(prod) )
+import Matrix (Matrix (..))
+import Semiring (Semiring (prod))
+
+type Input = [Double]
+
+type Output = [Double]
+
+type Batch = [([Double], [Double])]
 
 data Layer = Layer
   { weights :: Matrix Double,
     activators :: [ActivationFunction]
   }
+
+instance Show Layer where
+  show layer = show (layer & weights) ++ concatMap (\x -> show x ++ " ") (layer & activators)
 
 applyLayer :: Layer -> Input -> Output
 applyLayer layer input =
@@ -33,7 +42,7 @@ networkError network input output =
     & map (^ 2)
     & sum
 
-networkBatchError :: NeuralNetwork -> [(Input, Output)] -> Double
+networkBatchError :: NeuralNetwork -> Batch -> Double
 networkBatchError network samples =
   samples
     & map (uncurry $ networkError network)
@@ -42,9 +51,10 @@ networkBatchError network samples =
 instance Show NeuralNetwork where
   show nn =
     layers nn
-      & zip [1, 2 ..]
-      & concatMap (\(num, layer) -> "Layer " ++ show num ++ "\n" ++ show (layer & weights))
+      & concatMap (\layer -> show layer ++ "\n")
 
-type Input = [Double]
-
-type Output = [Double]
+data NetworkStructure = NetworkStructure
+  { numberOfInputs :: Int,
+    activationFunctions :: [[ActivationFunction]]
+  }
+  deriving (Show, Read)
