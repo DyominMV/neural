@@ -1,10 +1,17 @@
 module NeuralNetworkTest where
 
-import ActivationFunction
-import BackPropagation
+import ActivationFunction ( ActivationFunction(No, Gauss) )
+import BackPropagation ( learnBatch )
 import Data.Function ((&))
 import NeuralNetwork
-import RandomNetwork
+    ( applyNetwork,
+      networkBatchError,
+      Batch,
+      Input,
+      NetworkStructure(NetworkStructure),
+      NeuralNetwork,
+      Output )
+import RandomNetwork ( getRandomNetwork )
 
 batch :: Batch
 batch =
