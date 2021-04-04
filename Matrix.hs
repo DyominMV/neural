@@ -1,10 +1,14 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Matrix where
 
 import Data.Function ((&))
 import Data.List (transpose)
 import Semiring (Semiring (..))
+import Control.DeepSeq (NFData, force)
+import GHC.Generics (Generic)
 
-newtype Matrix x = Matrix {rows :: [[x]]} deriving (Eq)
+newtype Matrix x = Matrix {rows :: [[x]]} deriving (Eq, NFData, Generic)
 
 instance Functor Matrix where
   fmap f (Matrix m) = Matrix $ map (map f) m
@@ -24,15 +28,16 @@ cols (Matrix m) = transpose m
 transposeMatrix :: Matrix x -> Matrix x
 transposeMatrix m = m & cols & Matrix
 
-listProd :: (Semiring x) => [x] -> [x] -> x
+listProd :: (Semiring x, NFData x) => [x] -> [x] -> x
 listProd xs ys =
   zipWith prod xs ys
     & foldl plus zero
+    & force
 
 buildMatrix :: (a -> b -> c) -> [a] -> [b] -> Matrix c
 buildMatrix f as bs = Matrix $ map (\a -> map (f a) bs) as
 
-instance (Semiring x) => Semiring (Matrix x) where
+instance (Semiring x, NFData x) => Semiring (Matrix x) where
   zero = Matrix {rows = repeat $ repeat zero}
   one =
     [0, 1 ..]

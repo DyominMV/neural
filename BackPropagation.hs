@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module BackPropagation (learnBatch) where
 
 import ActivationFunction
@@ -5,23 +8,28 @@ import ActivationFunction
     derivative,
     eval,
   )
+import Control.DeepSeq (NFData, force)
 import Data.Function ((&))
 import Data.List (transpose)
+import GHC.Generics (Generic)
 import Matrix (Matrix (..), buildMatrix, transposeMatrix)
 import NeuralNetwork
-  ( Input,
+  ( Batch,
+    Input,
     Layer (..),
     NeuralNetwork (..),
     Output,
-    applyLayer, Batch
+    applyLayer,
   )
 import Semiring (Semiring (plus, prod))
 
 data NeuronOutput = NeuronOutput {oOutput :: Double, oDerivativeValue :: Double}
+  deriving (NFData, Generic)
 
 type LayerOutput = [NeuronOutput]
 
 data NeuronLearningInfo = NeuronLearningInfo {liOutput :: Double, liDelta :: Double}
+  deriving (NFData, Generic)
 
 type LayerLearningInfo = [NeuronLearningInfo]
 
@@ -31,6 +39,7 @@ prodV m v =
     & prod m
     & rows
     & concat
+    & force
 
 computeLayerOutputs :: Layer -> Input -> LayerOutput
 computeLayerOutputs layer input =
@@ -39,6 +48,7 @@ computeLayerOutputs layer input =
       (\activator sum -> NeuronOutput (eval activator sum) (derivative activator sum))
       (layer & activators)
     & (NeuronOutput 1 1 :)
+    & force
 
 computeOutputsFlipped :: NeuralNetwork -> Input -> [LayerOutput]
 computeOutputsFlipped network input =
@@ -48,6 +58,7 @@ computeOutputsFlipped network input =
           computeLayerOutputs nextLayer (lastOutput & map oOutput) : outputs
       )
       [map (`NeuronOutput` 1) (1 : input)]
+    & force
 
 outputLayerLearningInfo :: LayerOutput -> Output -> LayerLearningInfo
 outputLayerLearningInfo factOutput targetOutput =
@@ -57,6 +68,7 @@ outputLayerLearningInfo factOutput targetOutput =
     )
     factOutput
     (1 : targetOutput)
+    & force
 
 regularLayerLearningInfo :: LayerOutput -> Layer -> LayerLearningInfo -> LayerLearningInfo
 regularLayerLearningInfo factOutput layer nextLayerLearningInfo =
@@ -65,17 +77,19 @@ regularLayerLearningInfo factOutput layer nextLayerLearningInfo =
     & prodV (layer & weights & transposeMatrix)
     & zipWith (*) (factOutput & map oDerivativeValue)
     & zipWith NeuronLearningInfo (factOutput & map oOutput)
+    & force
 
 computeLearningInfo :: Output -> [Layer] -> [LayerOutput] -> [LayerLearningInfo]
 computeLearningInfo targetOutput layersFlipped outputsFlipped =
   zip layersFlipped (tail outputsFlipped)
     & foldl
       ( \computedLIs@(nextLayerLearningInfo : _) (layer, factOutput) ->
-          regularLayerLearningInfo factOutput layer nextLayerLearningInfo : computedLIs
+          force $ regularLayerLearningInfo factOutput layer nextLayerLearningInfo : computedLIs
       )
       [outputLayerLearningInfo (outputsFlipped & head) targetOutput]
 
 newtype WeightDeltas = WeightDeltas {deltas :: [Matrix Double]}
+  deriving (NFData, Generic)
 
 instance Semigroup WeightDeltas where
   (<>) wd1 wd2 =
@@ -92,6 +106,7 @@ applyWeightDeltas network weightDeltas =
     (network & layers)
     (weightDeltas & deltas)
     & NeuralNetwork
+    & force
 
 mapNeighbours :: (a -> a -> b) -> [a] -> [b]
 mapNeighbours f as = zipWith f as (tail as)
@@ -105,6 +120,7 @@ computeWeightDeltas eta learningInfos =
     )
     learningInfos
     & WeightDeltas
+    & force
 
 learnBatch :: Double -> Batch -> NeuralNetwork -> NeuralNetwork
 learnBatch eta samples network =
@@ -117,4 +133,5 @@ learnBatch eta samples network =
             & computeWeightDeltas eta
       )
     & foldl1 (<>)
+    & force
     & applyWeightDeltas network

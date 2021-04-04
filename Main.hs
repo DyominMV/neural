@@ -1,17 +1,25 @@
 module Main where
 
-import ActivationFunction ( ActivationFunction(..) )
-import BackPropagation ( learnBatch )
+import ActivationFunction (ActivationFunction (..))
+import BackPropagation (learnBatch)
 import Data.Function ((&))
 import NeuralNetwork
-    ( networkBatchError,
-      Batch,
-      NetworkStructure(NetworkStructure),
-      NeuralNetwork )
-import Random ( getRandomDoubles )
-import RandomNetwork ( getRandomNetwork )
+  ( Batch,
+    NetworkStructure (NetworkStructure),
+    NeuralNetwork,
+    networkBatchError,
+  )
+import Random (getRandomDoubles)
+import RandomNetwork (getRandomNetwork)
 import System.IO
-    ( hClose, openFile, hPutStrLn, IOMode(AppendMode) )
+  ( IOMode (AppendMode),
+    hClose,
+    hPutStrLn,
+    openFile,
+  )
+import GHC.Conc (par, pseq)
+import GHC.List (foldl1')
+import Control.DeepSeq (force)
 
 combinationsWithRepetitions :: Int -> [a] -> [[a]]
 combinationsWithRepetitions maxNumber xs =
@@ -68,81 +76,67 @@ monteCarloSamples = do
         )
   return (randomDoubles & generateSamples & take 10000)
 
-handleLattice :: FilePath -> Batch -> NeuralNetwork -> IO ()
-handleLattice filePath latticeBatch network = do
-  fileHandle <- openFile filePath AppendMode
-  let echo = hPutStrLn fileHandle
-  echo "First state of network:"
-  echo (show network)
-  let networks = iterate (learnBatch eta latticeBatch) network
-  networks
-    & map (`networkBatchError` latticeBatch)
-    & zipWith
-      ( \epoch errorValue ->
-          echo
-            ( show epoch
-                ++ ": error = "
-                ++ show errorValue
-            )
-      )
-      [1 .. epochCount]
-    & foldl1 (>>)
-  echo ""
-  echo "Last state of network:"
-  echo $ show $ networks !! epochCount
-  hClose fileHandle
+epoch :: Batch -> NeuralNetwork -> NeuralNetwork
+epoch batch network =
+  batch
+    & foldl (\nw b -> learnBatch eta [b] nw) network
 
-handleMonteCarlo :: FilePath -> Batch -> Batch -> NeuralNetwork -> IO ()
-handleMonteCarlo filePath latticeBatch randomBatch network = do
-  fileHandle <- openFile filePath AppendMode
-  let echo = hPutStrLn fileHandle
-  echo "First state of network:"
-  echo (show network)
-  let networks = iterate (learnBatch eta randomBatch) network
-  networks
-    & map (\nw -> (nw `networkBatchError` latticeBatch, nw `networkBatchError` randomBatch))
-    & zipWith
-      ( \epoch (testError, learningError) ->
-          echo
-            ( show epoch
-                ++ ": learning error = "
-                ++ show learningError
-                ++ "; test error = "
-                ++ show testError
-            )
+handleNetwork :: FilePath -> Batch -> Batch -> NeuralNetwork -> IO ()
+handleNetwork filePath trainingBatch testBatch network = do
+  echo $ "First state of network:\n" ++ show network
+  iterate (epoch trainingBatch) network
+    & take epochCount
+    & zip [1 ..]
+    & mapBodyAndTail
+      echoStepError
+      ( \p@(step, nw) -> do
+          echoStepError p
+          echo ("\nLast state of network:\n" ++ show nw)
       )
-      [1 .. epochCount]
-    & foldl1 (>>)
-  echo ""
-  echo "Last state of network:"
-  echo $ show $ networks !! epochCount
-  hClose fileHandle
+    & sequence_
+  where
+    mapBodyAndTail _ _ [] = []
+    mapBodyAndTail _ tailMapper [x] = [tailMapper x]
+    mapBodyAndTail bodyMapper tailMapper (x : xs) =
+      let resX = bodyMapper x
+       in resX : mapBodyAndTail bodyMapper tailMapper xs
+    echo str = do
+      fileHandle <- openFile filePath AppendMode
+      hPutStrLn fileHandle str
+      hClose fileHandle
+    echoStepError (step, nw) =
+      echo
+        ( show step
+            ++ ": learn error = "
+            ++ show (nw `networkBatchError` trainingBatch)
+            ++ ": test error = "
+            ++ show (nw `networkBatchError` testBatch)
+        )
 
 handleStructure :: Int -> Batch -> Batch -> NetworkStructure -> IO ()
 handleStructure times latticeBatch randomBatch networkStructure =
   [ do
       let fileName = (networkStructure & structureName) ++ show x
       rn <- getRandomNetwork 0.1 networkStructure
-      handleLattice ('L' : fileName) latticeBatch rn
-      handleMonteCarlo ('M' : fileName) latticeBatch randomBatch rn
+      handleNetwork ('L' : fileName) latticeBatch latticeBatch rn
+      handleNetwork ('M' : fileName) randomBatch latticeBatch rn
       putStrLn ((networkStructure & structureName) ++ show x)
     | x <- [1 .. times]
   ]
-    & foldl1 (>>)
+    & sequence_
 
 targetFunction :: Double -> Double -> Double
 targetFunction x y = (sin (x - y) - 2 * sin x) * 2 + y
 
 eta :: Double
-eta = 0.00002
+eta = 0.001
 
 epochCount :: Int
-epochCount = 1000
+epochCount = 100
 
 main :: IO ()
 main = do
   randomBatch <- monteCarloSamples
   let latticeBatch = latticeSamples
-  allStructures 3 4 [Periodic, No]
-    & map (handleStructure 3 latticeBatch randomBatch)
+  map (handleStructure 3 latticeBatch randomBatch) (allStructures 3 4 [Logistic, Periodic])
     & foldl1 (>>)

@@ -1,7 +1,11 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 module ActivationFunction where
 
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 data ActivationFunction = Logistic | Th | No | Periodic | Gauss
-  deriving (Show, Read)
+  deriving (Show, Read, NFData, Generic)
 
 eval :: ActivationFunction -> Double -> Double
 eval activator = case activator of
