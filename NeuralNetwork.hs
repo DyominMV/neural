@@ -53,7 +53,8 @@ networkBatchError :: NeuralNetwork -> Batch -> Double
 networkBatchError network samples =
   samples
     & map (uncurry $ networkError network)
-    & sum
+    & foldl (\(s, l) nxt -> (s + nxt, l+1)) (0,0)
+    & uncurry (/)
     & force
 
 instance Show NeuralNetwork where

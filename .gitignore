@@ -1,3 +1,6 @@
-ExperimentOutput
+experiment output
+saved output
 *.sh
+*_tests
 profiling
+trash
