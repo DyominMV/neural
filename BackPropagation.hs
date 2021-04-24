@@ -1,137 +1,106 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TupleSections #-}
 
 module BackPropagation (learnBatch) where
 
-import ActivationFunction
-  ( ActivationFunction,
-    derivative,
-    eval,
-  )
-import Control.DeepSeq (NFData, force)
+import ActivationFunction (derivative, eval)
+import Control.DeepSeq (force)
 import Data.Function ((&))
-import Data.List (transpose)
-import GHC.Generics (Generic)
-import Matrix (Matrix (..), buildMatrix, transposeMatrix)
+import Matrix
+  ( Matrix (Matrix),
+    buildMatrix,
+    cols,
+    transposeMatrix,
+  )
 import NeuralNetwork
   ( Batch,
     Input,
     Layer (..),
     NeuralNetwork (..),
     Output,
-    applyLayer,
   )
 import Semiring (Semiring (plus, prod))
 
-data NeuronOutput = NeuronOutput {oOutput :: Double, oDerivativeValue :: Double}
-  deriving (NFData, Generic)
+type OutputAndDerivative = ([(Double, Double)], Maybe Layer)
 
-type LayerOutput = [NeuronOutput]
+type OutputAndDeltas = ([(Double, Double)], Maybe Layer)
 
-data NeuronLearningInfo = NeuronLearningInfo {liOutput :: Double, liDelta :: Double}
-  deriving (NFData, Generic)
+vector :: [a] -> Matrix a
+vector as = Matrix $ map (: []) as
 
-type LayerLearningInfo = [NeuronLearningInfo]
+unvector :: Matrix a -> [a]
+unvector m = head $ cols m
 
-prodV :: Matrix Double -> Input -> Output
-prodV m v =
-  transpose [v] & Matrix
-    & prod m
-    & rows
-    & concat
-    & force
+foldToList :: (a -> b -> a) -> a -> [b] -> [a]
+foldToList f a [] = [a]
+foldToList f a (b : bs) = a : foldToList f (f a b) bs
 
-computeLayerOutputs :: Layer -> Input -> LayerOutput
-computeLayerOutputs layer input =
-  prodV (layer & weights) input
-    & zipWith
-      (\activator sum -> NeuronOutput (eval activator sum) (derivative activator sum))
-      (layer & activators)
-    & (NeuronOutput 1 1 :)
-    & force
-
-computeOutputsFlipped :: NeuralNetwork -> Input -> [LayerOutput]
-computeOutputsFlipped network input =
-  network & layers
-    & foldl
-      ( \outputs@(lastOutput : _) nextLayer ->
-          computeLayerOutputs nextLayer (lastOutput & map oOutput) : outputs
-      )
-      [map (`NeuronOutput` 1) (1 : input)]
-    & force
-
-outputLayerLearningInfo :: LayerOutput -> Output -> LayerLearningInfo
-outputLayerLearningInfo factOutput targetOutput =
-  zipWith
-    ( \(NeuronOutput outp deriv) target ->
-        NeuronLearningInfo outp (- deriv * (target - outp))
+outputsAndDerivatives :: Input -> NeuralNetwork -> [OutputAndDerivative]
+outputsAndDerivatives inp (NeuralNetwork layers) =
+  foldToList
+    ( \outputAndDerivative layer ->
+        outputAndDerivative
+          & map fst
+          & vector
+          & prod (layer & weights)
+          & unvector
+          & zipWith
+            (\activator sum -> (eval activator sum, derivative activator sum))
+            (layer & activators)
+          & ((1, 1) :)
     )
-    factOutput
-    (1 : targetOutput)
-    & force
+    (map (,1) $ 1 : inp)
+    layers
+    & flip zip (Nothing : map Just layers)
 
-regularLayerLearningInfo :: LayerOutput -> Layer -> LayerLearningInfo -> LayerLearningInfo
-regularLayerLearningInfo factOutput layer nextLayerLearningInfo =
-  tail nextLayerLearningInfo
-    & map liDelta
-    & prodV (layer & weights & transposeMatrix)
-    & zipWith (*) (factOutput & map oDerivativeValue)
-    & zipWith NeuronLearningInfo (factOutput & map oOutput)
-    & force
-
-computeLearningInfo :: Output -> [Layer] -> [LayerOutput] -> [LayerLearningInfo]
-computeLearningInfo targetOutput layersFlipped outputsFlipped =
-  zip layersFlipped (tail outputsFlipped)
-    & foldl
-      ( \computedLIs@(nextLayerLearningInfo : _) (layer, factOutput) ->
-          force $ regularLayerLearningInfo factOutput layer nextLayerLearningInfo : computedLIs
-      )
-      [outputLayerLearningInfo (outputsFlipped & head) targetOutput]
-
-newtype WeightDeltas = WeightDeltas {deltas :: [Matrix Double]}
-  deriving (NFData, Generic)
-
-instance Semigroup WeightDeltas where
-  (<>) wd1 wd2 =
-    zipWith
-      plus
-      (wd1 & deltas)
-      (wd2 & deltas)
-      & WeightDeltas
-
-applyWeightDeltas :: NeuralNetwork -> WeightDeltas -> NeuralNetwork
-applyWeightDeltas network weightDeltas =
-  zipWith
-    (\(Layer ws acts) deltaMatrix -> Layer (ws `plus` deltaMatrix) acts)
-    (network & layers)
-    (weightDeltas & deltas)
-    & NeuralNetwork
-    & force
+reversedOutputsAndDeltas :: Output -> [OutputAndDerivative] -> [OutputAndDeltas]
+reversedOutputsAndDeltas targetOutput reverseOutputs =
+  foldToList
+    ( \(outpWithDeltas, Just layer) (outpWithDerivatives, mbLayer) ->
+        outpWithDeltas
+          & tail
+          & map snd
+          & vector
+          & prod (layer & weights & transposeMatrix)
+          & unvector
+          & zipWith
+            (\(output, deriv) sumDelta -> (output, 2 * deriv * sumDelta))
+            outpWithDerivatives
+          & (,mbLayer)
+    )
+    ( fst (head reverseOutputs)
+        & zipWith
+          (\t (out, der) -> (out,  - 2 * der * (t - out)))
+          (1 : targetOutput)
+        & (,snd $ head reverseOutputs)
+    )
+    (tail reverseOutputs)
 
 mapNeighbours :: (a -> a -> b) -> [a] -> [b]
-mapNeighbours f as = zipWith f as (tail as)
+mapNeighbours f [] = []
+mapNeighbours f [a] = []
+mapNeighbours f (a1 : a2 : as) = f a1 a2 : mapNeighbours f (a2 : as)
 
-computeWeightDeltas :: Double -> [LayerLearningInfo] -> WeightDeltas
-computeWeightDeltas eta learningInfos =
+computeWeightDeltas :: [OutputAndDeltas] -> [Matrix Double]
+computeWeightDeltas =
   mapNeighbours
-    ( \inputLayer ouputLayer ->
-        buildMatrix (*) (ouputLayer & tail & map liDelta) (inputLayer & map liOutput)
-          & fmap (* (- eta))
-    )
-    learningInfos
-    & WeightDeltas
-    & force
+    (\(leftOutputs, _) (rightOutputs, _) -> buildMatrix (*) (tail $ map snd rightOutputs) (map fst leftOutputs))
 
 learnBatch :: Double -> Batch -> NeuralNetwork -> NeuralNetwork
-learnBatch eta samples network =
-  samples
+learnBatch eta batch network =
+  batch
     & map
-      ( \(input, output) ->
-          input
-            & computeOutputsFlipped network
-            & computeLearningInfo output (network & layers & reverse)
-            & computeWeightDeltas eta
+      ( \(inp, outp) ->
+          outputsAndDerivatives inp network
+            & reverse
+            & reversedOutputsAndDeltas outp
+            & reverse
+            & computeWeightDeltas
       )
-    & foldl1 (<>)
+    & foldl1 (zipWith plus)
+    & zipWith
+      ( \(Layer ws as) matrix ->
+          Layer (ws `plus` fmap (\x -> - x * eta / fromIntegral (length batch)) matrix) as
+      )
+      (network & layers)
+    & NeuralNetwork
     & force
-    & applyWeightDeltas network

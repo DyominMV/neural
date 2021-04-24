@@ -140,7 +140,7 @@ experiment1 = do
 -- 2 слоя по 10 нейронов, шаг - 0.25
 experiment2 :: IO ()
 experiment2 = do
-  handleNetwork "exp2" 3000 (sampleBatch 0.25) testData 0.0001 (simpleStructure [10, 10])
+  handleNetwork "exp2" 700 (sampleBatch 0.25) testData 0.0001 (simpleStructure [10, 10])
 
 -- Конфигурации сети (слои от 1 до 4) (нейроны на слое: 10, 15, 20, 25, 30)
 -- 300 эпох, шаг 0.25
@@ -157,6 +157,6 @@ experiment3 = do
 
 main :: IO ()
 main = do
-  -- experiment1
+  experiment1
   experiment2
-  -- experiment3
+  experiment3
